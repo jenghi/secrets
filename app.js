@@ -4,13 +4,24 @@ const express = require ("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require ("mongoose");
-const bcrypt = require("bcrypt");
+
+const session = require ("express-session");
+const passport = require("passport");
+const passportLocalMongoose = require("passport-local-mongoose");
 
 const app = express();
 
 app.use(express.static("public"));
 app.set('view engine', 'ejs');
 app.use(bodyParser.urlencoded({extended:true}));
+app.use(session({
+    secret: process.env.SECRET,
+    resave: false,
+    saveUninitialized: false
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
 
 mongoose.connect("mongodb://0.0.0.0:27017/userDB", {useNewUrlParser: true});
 
@@ -19,41 +30,36 @@ const userSchema = new mongoose.Schema ({
     password: String
 });
 
+userSchema.plugin(passportLocalMongoose);
+
 const User = mongoose.model("User", userSchema);
+
+passport.use(User.createStrategy());
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
 app.get("/", function(req, res){
    res.render ("home");
 });
 
+app.get("/secrets", function(req, res){
+    if (req.isAuthenticated()){
+        res.render("secrets");
+        console.log("Login erfolgreich");
+    }else {
+        res.redirect("/login");
+        console.log("zuerst Login");
+    }
+});
+
 ////////////////////////  LOGIN /////////////////////
 app.route("/login")
     .get (function(req, res){
-        res.render ("login");
+       
     })
     .post (async(req, res) => {
         try {
-            const username = req.body.username;
-            const password = req.body.password;
             
-            User.findOne({email: username}).then(function(foundUser){
-                if (foundUser){   
-                console.log(foundUser.password);
-                    bcrypt.compare(password, foundUser.password, function(err, result){
-                        if (result === true){
-                            console.log("success login");
-                            res.render("secrets");
-                        }else{
-                            console.log("failde login");
-                        }
-                    });
-
-                    
-                } else {
-                    res.render("home");
-                    console.log("false user");
-                }
-                
-            });
         }
         catch (error) {
             console.log(error);
@@ -69,22 +75,15 @@ app.route("/login")
 
  .post(async(req, res) => {
     try {
-
-        const saltRounds = 10;
-    
-        bcrypt.hash(req.body.password, saltRounds, function(err, hash){
-            const newUser = new User({
-                email: req.body.username,
-                password: hash
-                });
-            newUser.save().then(saveDoc => {
-                {
-                    console.log("new User" + req.body.username);
-                    res.render("secrets");
-                }});
-
+        User.register({username: req.body.username}, req.body.password).then (function(err, user){
+            passport.authenticate('local', { failureRedirect: '/login', failureMessage: true }),
+            function(req, res) {
+                res.redirect("/secrets");
+            };
+        }).catch(function(err){
+            console.log(err + " User gibts schon");
+            res.redirect("/register");
         });
-       
        
     }
     catch (error){
