@@ -8,7 +8,7 @@ const mongoose = require ("mongoose");
 const session = require ("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
-
+mongoose.set('strictQuery', true);
 const app = express();
 
 app.use(express.static("public"));
@@ -55,11 +55,22 @@ app.get("/secrets", function(req, res){
 ////////////////////////  LOGIN /////////////////////
 app.route("/login")
     .get (function(req, res){
-       
+        res.render ("login");
     })
     .post (async(req, res) => {
         try {
-            
+            const user = new User ({
+                username: req.body.username,
+                password: req.body.password
+            });
+            req.login(user, function(err){
+                if (err){
+                    console.log(err);
+                }else {
+                    passport.authenticate('local')(req, res, function(){
+                        res.redirect("/secrets");
+                        });
+         } });
         }
         catch (error) {
             console.log(error);
@@ -76,10 +87,10 @@ app.route("/login")
  .post(async(req, res) => {
     try {
         User.register({username: req.body.username}, req.body.password).then (function(err, user){
-            passport.authenticate('local', { failureRedirect: '/login', failureMessage: true }),
-            function(req, res) {
+            passport.authenticate('local')(req, res, function(){
                 res.redirect("/secrets");
-            };
+            });
+           
         }).catch(function(err){
             console.log(err + " User gibts schon");
             res.redirect("/register");
@@ -89,6 +100,16 @@ app.route("/login")
     catch (error){
         console.log(error);
     }});
+
+
+app.get("/logout", function(req, res){
+    req.logout(function(err){
+        if (err){
+            console.log("ausloggen ging nicht");
+        }
+    });
+    res.redirect("/");
+});
 
 app.listen(3000, function(){
     console.log("Server Manuela ist started on Port 3000");
